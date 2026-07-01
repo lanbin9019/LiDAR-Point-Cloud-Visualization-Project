@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiDAR Point Cloud Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .panel {
+            position: absolute;
+            background: rgba(20, 20, 40, 0.92);
+            border: 1px solid rgba(100, 140, 255, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: blur(8px);
+        }
+
+        #control-panel {
+            top: 16px;
+            left: 16px;
+            width: 300px;
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
+        }
+
+        #info-panel {
+            top: 16px;
+            right: 16px;
+            width: 240px;
+        }
+
+        #playback-panel {
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 24px;
+        }
+
+        h2 {
+            font-size: 14px;
+            color: #8ab4f8;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        h3 {
+            font-size: 12px;
+            color: #7a9ec9;
+            margin: 12px 0 6px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 6px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            color: #eee;
+            font-size: 12px;
+        }
+
+        .form-group input[type="range"] {
+            padding: 0;
+            background: transparent;
+            border: none;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #4a6cf7, #6366f1);
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #5b7bf8, #7577f3);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .btn-group button {
+            flex: 1;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #8ab4f8;
+            font-weight: 600;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .view-toggle button {
+            flex: 1;
+            padding: 6px;
+            font-size: 11px;
+        }
+
+        .view-toggle button.active {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .color-mode {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .color-mode button {
+            padding: 4px 8px;
+            font-size: 10px;
+        }
+
+        .color-mode button.active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+        }
+
+        #loading.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(100, 140, 255, 0.3);
+            border-top-color: #4a6cf7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #file-list {
+            max-height: 120px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+
+        .file-item {
+            padding: 6px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-item:hover {
+            background: rgba(100, 140, 255, 0.15);
+        }
+
+        .file-item.active {
+            background: rgba(100, 140, 255, 0.25);
+        }
+
+        #playback-panel button {
+            padding: 6px 12px;
+        }
+
+        #frame-slider {
+            width: 200px;
+        }
+
+        #frame-info {
+            font-size: 11px;
+            color: #aaa;
+            min-width: 80px;
+        }
+
+        .legend {
+            margin-top: 8px;
+            font-size: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 0;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="panel" id="control-panel">
+        <h2>LiDAR Point Cloud Viewer</h2>
+
+        <h3>File Management</h3>
+        <div class="btn-group">
+            <button onclick="refreshFiles()">Refresh Files</button>
+            <button class="secondary" onclick="document.getElementById('file-input').click()">Upload PCD</button>
+        </div>
+        <input type="file" id="file-input" accept=".pcd,.ply,.bin,.xyz,.pts" style="display:none"
+            onchange="uploadFile(event)">
+        <div id="file-list"></div>
+
+        <h3>Processing Parameters</h3>
+        <div class="form-group">
+            <label>Voxel Size: <span id="voxel-val">0.10</span></label>
+            <input type="range" id="voxel-size" min="0.01" max="0.5" step="0.01" value="0.1"
+                oninput="document.getElementById('voxel-val').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="form-group">
+            <label>Statistical Filter Neighbors: <span id="stat-nb-val">20</span></label>
+            <input type="range" id="stat-nb" min="5" max="50" step="1" value="20"
+                oninput="document.getElementById('stat-nb-val').textContent=this.value">
+        </div>
+        <div class="form-group">
+            <label>Ground Distance Threshold: <span id="ground-dist-val">0.30</span></label>
+            <input type="range" id="ground-dist" min="0.05" max="1.0" step="0.05" value="0.3"
+                oninput="document.getElementById('ground-dist-val').textContent=parseFloat(this.value).toFixed(2)">
+        </div>
+        <div class="btn-group">
+            <button onclick="reprocess()">Reprocess</button>
+        </div>
+
+        <h3>View Mode</h3>
+        <div class="view-toggle">
+            <button id="btn-fps" onclick="setViewMode('fps')">First Person</button>
+            <button id="btn-orbit" class="active" onclick="setViewMode('orbit')">God View</button>
+        </div>
+
+        <h3>Color Mode</h3>
+        <div class="color-mode">
+            <button id="btn-color-height" class="active" onclick="setColorMode('height')">Height</button>
+            <button id="btn-color-intensity" onclick="setColorMode('intensity')">Intensity</button>
+            <button id="btn-color-classification" onclick="setColorMode('classification')">Classification</button>
+        </div>
+        <div class="legend" id="legend"></div>
+
+        <h3>Point Size</h3>
+        <div class="form-group">
+            <input type="range" id="point-size" min="0.5" max="8" step="0.5" value="2"
+                oninput="updatePointSize(parseFloat(this.value))">
+        </div>
+    </div>
+
+    <div class="panel" id="info-panel">
+        <h2>Statistics</h2>
+        <div class="stat"><span class="stat-label">Points</span><span class="stat-value" id="stat-points">-</span></div>
+        <div class="stat"><span class="stat-label">Ground Points</span><span class="stat-value"
+                id="stat-ground">-</span></div>
+        <div class="stat"><span class="stat-label">Obstacle Points</span><span class="stat-value"
+                id="stat-obstacle">-</span></div>
+        <div class="stat"><span class="stat-label">FPS</span><span class="stat-value" id="stat-fps">-</span></div>
+        <div class="stat"><span class="stat-label">Camera</span><span class="stat-value" id="stat-camera">-</span></div>
+        <div class="stat"><span class="stat-label">View Mode</span><span class="stat-value" id="stat-view">Orbit</span>
+        </div>
+    </div>
+
+    <div class="panel" id="playback-panel">
+        <button onclick="prevFrame()">⏮</button>
+        <button onclick="togglePlayback()" id="btn-play">▶</button>
+        <button onclick="nextFrame()">⏭</button>
+        <input type="range" id="frame-slider" min="0" max="0" value="0" oninput="seekFrame(parseInt(this.value))">
+        <span id="frame-info">Frame: 0/0</span>
+    </div>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Processing Point Cloud...</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        let scene, camera, renderer, orbitControls, fpsControls;
+        let pointCloud = null;
+        let currentData = null;
+        let viewMode = 'orbit';
+        let colorMode = 'height';
+        let frames = [];
+        let currentFrame = 0;
+        let isPlaying = false;
+        let playInterval = null;
+        let clock = new THREE.Clock();
+        let fpsFrames = 0;
+        let fpsTime = 0;
+
+        const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
+        const moveSpeed = 20;
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a1a);
+            scene.fog = new THREE.Fog(0x0a0a1a, 200, 500);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 50, 80);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            orbitControls = new OrbitControls(camera, renderer.domElement);
+            orbitControls.enableDamping = true;
+            orbitControls.dampingFactor = 0.05;
+            orbitControls.maxDistance = 500;
+
+            fpsControls = new PointerLockControls(camera, renderer.domElement);
+            fpsControls.addEventListener('lock', () => {
+                orbitControls.enabled = false;
+            });
+            fpsControls.addEventListener('unlock', () => {
+                if (viewMode === 'fps') {
+                    orbitControls.enabled = false;
+                }
+            });
+
+            addGrid();
+            addAxesHelper();
+            addAmbientLight();
+
+            window.addEventListener('resize', onResize);
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+
+            animate();
+            refreshFiles();
+            updateLegend();
+        }
+
+        function addGrid() {
+            const grid = new THREE.GridHelper(200, 50, 0x303060, 0x202040);
+            grid.position.y = -0.1;
+            scene.add(grid);
+        }
+
+        function addAxesHelper() {
+            const axes = new THREE.AxesHelper(10);
+            scene.add(axes);
+        }
+
+        function addAmbientLight() {
+            const light = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(light);
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onKeyDown(e) {
+            if (viewMode !== 'fps' || !fpsControls.isLocked) return;
+            switch (e.code) {
+                case 'KeyW': moveState.forward = true; break;
+                case 'KeyS': moveState.backward = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+                case 'Space': moveState.up = true; break;
+                case 'ShiftLeft': moveState.down = true; break;
+            }
+        }
+
+        function onKeyUp(e) {
+            switch (e.code) {
+                case 'KeyW': moveState.forward = false; break;
+                case 'KeyS': moveState.backward = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+                case 'Space': moveState.up = false; break;
+                case 'ShiftLeft': moveState.down = false; break;
+                case 'Escape':
+                    if (viewMode === 'fps') {
+                        fpsControls.unlock();
+                    }
+                    break;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if (viewMode === 'fps' && fpsControls.isLocked) {
+                const direction = new THREE.Vector3();
+                const right = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                right.crossVectors(direction, camera.up).normalize();
+
+                if (moveState.forward) camera.position.addScaledVector(direction, moveSpeed * delta);
+                if (moveState.backward) camera.position.addScaledVector(direction, -moveSpeed * delta);
+                if (moveState.left) camera.position.addScaledVector(right, -moveSpeed * delta);
+                if (moveState.right) camera.position.addScaledVector(right, moveSpeed * delta);
+                if (moveState.up) camera.position.y += moveSpeed * delta;
+                if (moveState.down) camera.position.y -= moveSpeed * delta;
+            } else if (viewMode === 'orbit') {
+                orbitControls.update();
+            }
+
+            renderer.render(scene, camera);
+
+            fpsFrames++;
+            fpsTime += delta;
+            if (fpsTime >= 1.0) {
+                document.getElementById('stat-fps').textContent = Math.round(fpsFrames / fpsTime);
+                fpsFrames = 0;
+                fpsTime = 0;
+            }
+
+            const pos = camera.position;
+            document.getElementById('stat-camera').textContent =
+                `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn-fps').classList.toggle('active', mode === 'fps');
+            document.getElementById('btn-orbit').classList.toggle('active', mode === 'orbit');
+            document.getElementById('stat-view').textContent = mode === 'fps' ? 'First Person' : 'Orbit';
+
+            if (mode === 'fps') {
+                orbitControls.enabled = false;
+                fpsControls.lock();
+            } else {
+                fpsControls.unlock();
+                orbitControls.enabled = true;
+            }
+        }
+
+        function setColorMode(mode) {
+            colorMode = mode;
+            document.querySelectorAll('.color-mode button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-color-${mode}`).classList.add('active');
+            if (currentData) updatePointCloudColors();
+            updateLegend();
+        }
+
+        function updateLegend() {
+            const legend = document.getElementById('legend');
+            if (colorMode === 'height') {
+                legend.innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:#0000ff"></div>Low (Blue)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#00ff00"></div>Mid (Green)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#ff0000"></div>High (Red)</div>
+                `;
+            } else if (colorMode === 'classification') {
+                legend.innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:#4a9eff"></div>Ground</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#ff6b35"></div>Obstacle</div>
+                `;
+            } else {
+                legend.innerHTML = `
+                    <div class="legend-item"><div class="legend-color" style="background:linear-gradient(90deg,#000,#fff)"></div>Low → High Intensity</div>
+                `;
+            }
+        }
+
+        function heightToColor(y, minY, maxY) {
+            const t = (y - minY) / (maxY - minY + 0.001);
+            const r = Math.min(1, Math.max(0, t < 0.5 ? 0 : (t - 0.5) * 2));
+            const g = Math.min(1, Math.max(0, t < 0.5 ? t * 2 : (1 - t) * 2));
+            const b = Math.min(1, Math.max(0, t < 0.5 ? 1 - t * 2 : 0));
+            return [r, g, b];
+        }
+
+        function renderPointCloud(data) {
+            currentData = data;
+
+            if (pointCloud) {
+                scene.remove(pointCloud);
+                pointCloud.geometry.dispose();
+                pointCloud.material.dispose();
+            }
+
+            const positions = new Float32Array(data.num_points * 3);
+            const colors = new Float32Array(data.num_points * 3);
+
+            for (let i = 0; i < data.num_points; i++) {
+                positions[i * 3] = data.points[i][0];
+                positions[i * 3 + 1] = data.points[i][2];
+                positions[i * 3 + 2] = -data.points[i][1];
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: parseFloat(document.getElementById('point-size').value),
+                vertexColors: true,
+                sizeAttenuation: true,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            pointCloud = new THREE.Points(geometry, material);
+            scene.add(pointCloud);
+
+            updatePointCloudColors();
+            updateStats(data);
+
+            const center = new THREE.Vector3(
+                (data.bounds.min[0] + data.bounds.max[0]) / 2,
+                (data.bounds.min[2] + data.bounds.max[2]) / 2,
+                -(data.bounds.min[1] + data.bounds.max[1]) / 2
+            );
+            orbitControls.target.copy(center);
+        }
+
+        function updatePointCloudColors() {
+            if (!pointCloud || !currentData) return;
+            const colors = pointCloud.geometry.attributes.color;
+            const data = currentData;
+            const minY = data.bounds.min[2];
+            const maxY = data.bounds.max[2];
+
+            for (let i = 0; i < data.num_points; i++) {
+                let r, g, b;
+                if (colorMode === 'height') {
+                    [r, g, b] = heightToColor(data.points[i][2], minY, maxY);
+                } else if (colorMode === 'classification') {
+                    if (data.ground_labels[i] === 1) {
+                        r = 0.29; g = 0.62; b = 1.0;
+                    } else {
+                        r = 1.0; g = 0.42; b = 0.21;
+                    }
+                } else {
+                    const intensity = data.intensity[i] || 0;
+                    const v = Math.min(1, Math.max(0, intensity));
+                    r = v; g = v; b = v;
+                }
+                colors.setXYZ(i, r, g, b);
+            }
+            colors.needsUpdate = true;
+        }
+
+        function updatePointSize(size) {
+            if (pointCloud) pointCloud.material.size = size;
+        }
+
+        function updateStats(data) {
+            const groundCount = data.ground_labels.filter(l => l === 1).length;
+            document.getElementById('stat-points').textContent = data.num_points.toLocaleString();
+            document.getElementById('stat-ground').textContent = groundCount.toLocaleString();
+            document.getElementById('stat-obstacle').textContent = (data.num_points - groundCount).toLocaleString();
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+        }
+
+        async function refreshFiles() {
+            try {
+                const resp = await fetch('/api/files');
+                const data = await resp.json();
+                const list = document.getElementById('file-list');
+                list.innerHTML = '';
+
+                if (data.files.length === 0) {
+                    list.innerHTML = '<div style="font-size:11px;color:#666;padding:8px">No files found. Place .pcd/.ply/.bin files in the data/ directory.</div>';
+                    return;
+                }
+
+                frames = data.files;
+                document.getElementById('frame-slider').max = Math.max(0, frames.length - 1);
+
+                data.files.forEach((file, idx) => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.textContent = file.name;
+                    item.title = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                    item.onclick = () => loadFile(file.file_id, idx);
+                    list.appendChild(item);
+                });
+            } catch (e) {
+                console.error('Failed to load files:', e);
+            }
+        }
+
+        async function loadFile(fileId, frameIdx) {
+            showLoading(true);
+            try {
+                const resp = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: fileId,
+                        voxel_size: parseFloat(document.getElementById('voxel-size').value),
+                        stat_nb: parseInt(document.getElementById('stat-nb').value),
+                        ground_dist: parseFloat(document.getElementById('ground-dist').value),
+                    })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                renderPointCloud(data);
+
+                if (frameIdx !== undefined) {
+                    currentFrame = frameIdx;
+                    document.getElementById('frame-slider').value = frameIdx;
+                    document.getElementById('frame-info').textContent = `Frame: ${frameIdx + 1}/${frames.length}`;
+                    document.querySelectorAll('.file-item').forEach((el, i) => {
+                        el.classList.toggle('active', i === frameIdx);
+                    });
+                }
+            } catch (e) {
+                alert('Failed to process file: ' + e.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function reprocess() {
+            if (frames.length > 0 && currentFrame < frames.length) {
+                loadFile(frames[currentFrame].file_id, currentFrame);
+            }
+        }
+
+        function prevFrame() {
+            if (currentFrame > 0) {
+                currentFrame--;
+                loadFile(frames[currentFrame].file_id, currentFrame);
+            }
+        }
+
+        function nextFrame() {
+            if (currentFrame < frames.length - 1) {
+                currentFrame++;
+                loadFile(frames[currentFrame].file_id, currentFrame);
+            }
+        }
+
+        function seekFrame(idx) {
+            if (idx >= 0 && idx < frames.length) {
+                currentFrame = idx;
+                loadFile(frames[idx].file_id, idx);
+            }
+        }
+
+        function togglePlayback() {
+            isPlaying = !isPlaying;
+            document.getElementById('btn-play').textContent = isPlaying ? '⏸' : '▶';
+            if (isPlaying) {
+                playInterval = setInterval(() => {
+                    if (currentFrame < frames.length - 1) {
+                        nextFrame();
+                    } else {
+                        currentFrame = -1;
+                        nextFrame();
+                    }
+                }, 500);
+            } else {
+                clearInterval(playInterval);
+            }
+        }
+
+        async function uploadFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showLoading(true);
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const resp = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await resp.json();
+                if (result.error) {
+                    alert('Upload failed: ' + result.error);
+                    return;
+                }
+                await refreshFiles();
+                if (result.file_id) {
+                    loadFile(result.file_id, frames.length - 1);
+                }
+            } catch (e) {
+                alert('Upload failed: ' + e.message);
+            } finally {
+                showLoading(false);
+            }
+            event.target.value = '';
+        }
+
+        init();
+
+        window.refreshFiles = refreshFiles;
+        window.uploadFile = uploadFile;
+        window.reprocess = reprocess;
+        window.setViewMode = setViewMode;
+        window.setColorMode = setColorMode;
+        window.updatePointSize = updatePointSize;
+        window.prevFrame = prevFrame;
+        window.nextFrame = nextFrame;
+        window.seekFrame = seekFrame;
+        window.togglePlayback = togglePlayback;
+    </script>
+</body>
+
+</html>
