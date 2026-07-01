@@ -1,0 +1,2 @@
+# LiDAR-Point-Cloud-Visualization-Project
+本项目是一个基于 Flask + Open3D + Three.js 的 LiDAR 点云可视化 Web 应用，主要面向自动驾驶场景，提供点云数据的上传、处理、渲染和交互式浏览功能。
